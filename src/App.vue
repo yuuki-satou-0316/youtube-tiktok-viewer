@@ -120,6 +120,12 @@ import { Swiper, SwiperSlide } from 'swiper/vue'
 import { EffectFade } from 'swiper/modules'
 import VideoPlayer from './components/VideoPlayer.vue'
 import YouTubeApiService, { DEFAULT_CHANNEL_CONFIG } from './services/youtubeApi.js'
+import { 
+  trackSessionStart, 
+  trackVideoSwipe, 
+  trackApiUsage, 
+  trackError 
+} from './utils/analytics.js'
 
 export default {
   name: 'App',
@@ -191,9 +197,20 @@ export default {
         
         console.log('動画リスト更新完了:', videos.value.length, '件')
         
+        // アナリティクス: API使用状況追跡
+        trackApiUsage(
+          result.videos.length > 0 && result.videos[0].id === 'jNQXAC9IVRw' ? 'demo_data' : 'youtube_api',
+          true,
+          result.videos.length
+        )
+        
       } catch (err) {
         console.error('動画読み込みエラー:', err)
         error.value = err.message
+        
+        // アナリティクス: エラー追跡
+        trackError('api_error', err.message)
+        trackApiUsage('youtube_api', false, 0)
       } finally {
         loading.value = false
         loadingMore.value = false
@@ -204,7 +221,18 @@ export default {
      * スライド変更時の処理
      */
     const onSlideChange = (swiper) => {
+      const prevIndex = currentIndex.value
       currentIndex.value = swiper.activeIndex
+      
+      // アナリティクス: 動画スワイプ追跡
+      if (videos.value[prevIndex] && videos.value[currentIndex.value]) {
+        const direction = swiper.activeIndex > prevIndex ? 'down' : 'up'
+        trackVideoSwipe(
+          direction,
+          videos.value[prevIndex].id,
+          videos.value[currentIndex.value].id
+        )
+      }
       
       // 現在の動画のみ再生状態を管理
       isPlaying.value = false
@@ -306,6 +334,8 @@ export default {
 
     // コンポーネントマウント時の処理
     onMounted(() => {
+      // アナリティクス: セッション開始追跡
+      trackSessionStart()
       loadVideos()
     })
 

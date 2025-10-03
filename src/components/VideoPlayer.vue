@@ -45,6 +45,7 @@
 
 <script>
 import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { trackVideoPlay, trackVideoPause, trackVolumeChange, trackError } from '../utils/analytics.js'
 
 export default {
   name: 'VideoPlayer',
@@ -229,10 +230,16 @@ export default {
         switch (state) {
           case window.YT.PlayerState.PLAYING:
             isPlaying.value = true
+            // アナリティクス: 動画再生追跡
+            trackVideoPlay(props.video.id, props.video.title, props.video.channelTitle)
             break
           case window.YT.PlayerState.PAUSED:
           case window.YT.PlayerState.ENDED:
             isPlaying.value = false
+            // アナリティクス: 動画停止追跡
+            if (player && typeof player.getCurrentTime === 'function') {
+              trackVideoPause(props.video.id, Math.floor(player.getCurrentTime()))
+            }
             break
         }
         
@@ -293,6 +300,9 @@ export default {
         isMuted.value = true
         console.log('音声オフ:', props.video.id)
       }
+      
+      // アナリティクス: 音量変更追跡
+      trackVolumeChange(isMuted.value, props.video.id)
       
       emit('mute-state-change', props.video.id, isMuted.value)
     }
