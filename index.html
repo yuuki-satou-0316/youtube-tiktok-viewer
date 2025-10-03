@@ -21,24 +21,10 @@
     gtag('config', measurementId, {
       page_title: 'YouTube TikTok Viewer',
       page_location: window.location.href,
-      debug_mode: true,
       send_page_view: true
     });
     
     console.log('✅ GA configured with ID:', measurementId);
-    
-    // GAスクリプト読み込み完了後にテストイベント送信
-    window.addEventListener('load', () => {
-      setTimeout(() => {
-        console.log('🧪 Sending test event...');
-        gtag('event', 'page_load_test', {
-          event_category: 'debug',
-          event_label: 'initialization_test',
-          value: 1
-        });
-        console.log('✅ Test event sent after page load');
-      }, 2000);
-    });
     
     // gtag関数をグローバルに利用可能にする
     window.gtag = gtag;

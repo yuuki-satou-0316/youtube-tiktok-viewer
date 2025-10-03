@@ -9,8 +9,6 @@
  * @param {Object} parameters - 追加パラメータ
  */
 export const trackEvent = (action, parameters = {}) => {
-  console.log('📊 Analytics Event:', action, parameters);
-  
   if (typeof gtag !== 'undefined') {
     const eventData = {
       ...parameters,
@@ -19,9 +17,6 @@ export const trackEvent = (action, parameters = {}) => {
     };
     
     gtag('event', action, eventData);
-    console.log('✅ GA Event sent:', action, eventData);
-  } else {
-    console.warn('❌ gtag not available - event not sent:', action);
   }
 }
 
