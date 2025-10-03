@@ -9,12 +9,19 @@
  * @param {Object} parameters - 追加パラメータ
  */
 export const trackEvent = (action, parameters = {}) => {
+  console.log('📊 Analytics Event:', action, parameters);
+  
   if (typeof gtag !== 'undefined') {
-    gtag('event', action, {
+    const eventData = {
       ...parameters,
       app_name: 'YouTube TikTok Viewer',
       timestamp: new Date().toISOString()
-    })
+    };
+    
+    gtag('event', action, eventData);
+    console.log('✅ GA Event sent:', action, eventData);
+  } else {
+    console.warn('❌ gtag not available - event not sent:', action);
   }
 }
 
