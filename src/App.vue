@@ -447,12 +447,17 @@ export default {
 .video-container {
   width: 100%;
   height: 100vh;
+  height: 100svh; /* Safari対応: 実際の表示可能高さ */
   position: relative;
 }
 
 .swiper-container {
   width: 100%;
   height: 100%;
+  
+  /* iOS Safari 追加対応 */
+  min-height: 100vh;
+  min-height: 100svh;
 }
 
 .video-slide {
@@ -469,6 +474,9 @@ export default {
   right: 0;
   background: linear-gradient(transparent, rgba(0,0,0,0.7));
   padding: 60px 20px 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
   z-index: 10;
   pointer-events: none;
 }
