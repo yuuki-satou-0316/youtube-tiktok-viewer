@@ -3,8 +3,8 @@
     <div class="quiz-container">
       <!-- クイズヘッダー -->
       <div class="quiz-header">
-        <h1>🧠 YouTubeクイズ</h1>
-        <p>YouTuberや動画に関するクイズに挑戦しよう！</p>
+        <h1>🎭 ジャルジャルクイズ</h1>
+        <p>動画を見てタイトルを当てよう！</p>
       </div>
 
       <!-- メインコンテンツ -->
@@ -12,33 +12,32 @@
         <!-- スタート画面 -->
         <div class="welcome-content">
           <div class="quiz-icon">🎯</div>
-          <h2>クイズチャレンジ</h2>
-          <p>YouTubeに関する問題が10問出題されます</p>
-          
-          <!-- 難易度選択 -->
-          <div class="difficulty-selector">
-            <h3>難易度を選択</h3>
-            <div class="difficulty-options">
-              <button
-                v-for="level in difficultyLevels"
-                :key="level.id"
-                @click="selectedDifficulty = level.id"
-                :class="['difficulty-btn', { active: selectedDifficulty === level.id }]"
-              >
-                <span class="level-icon">{{ level.icon }}</span>
-                <span class="level-name">{{ level.name }}</span>
-                <span class="level-desc">{{ level.description }}</span>
-              </button>
+          <h2>ジャルジャル動画タイトル当てクイズ</h2>
+          <p>動画を見てタイトルを4択から選ぼう！</p>
+          <div class="quiz-info">
+            <div class="info-item">
+              <span class="info-icon">📹</span>
+              <span>全5問の動画クイズ</span>
+            </div>
+            <div class="info-item">
+              <span class="info-icon">🎭</span>
+              <span>ジャルジャルの人気動画</span>
+            </div>
+            <div class="info-item">
+              <span class="info-icon">🏆</span>
+              <span>正解数で称号が変わる</span>
             </div>
           </div>
 
-          <button @click="startQuiz" class="start-button">
-            クイズを開始
+          <button @click="startQuiz" class="start-button" :disabled="loading">
+            <span v-if="loading">⏳</span>
+            <span v-else>🎬</span>
+            {{ loading ? '動画を読み込み中...' : 'クイズをはじめる' }}
           </button>
         </div>
       </div>
 
-      <div v-else-if="showResults" class="quiz-results">
+      <div v-else-if="gameStarted && showResults" class="quiz-results">
         <!-- 結果画面 -->
         <div class="results-content">
           <div class="score-display">
@@ -62,10 +61,6 @@
                 <span class="stat-label">所要時間</span>
                 <span class="stat-value">{{ formatTime(elapsedTime) }}</span>
               </div>
-              <div class="stat-item">
-                <span class="stat-label">難易度</span>
-                <span class="stat-value">{{ getCurrentDifficulty().name }}</span>
-              </div>
             </div>
           </div>
 
@@ -81,7 +76,7 @@
         </div>
       </div>
 
-      <div v-else class="quiz-game">
+      <div v-else-if="gameStarted && !showResults" class="quiz-game">
         <!-- クイズゲーム画面 -->
         <div class="quiz-progress">
           <div class="progress-bar">
@@ -90,19 +85,22 @@
           <span class="progress-text">{{ currentQuestion }} / {{ totalQuestions }}</span>
         </div>
 
-        <div class="question-container">
-          <div class="question-header">
-            <span class="question-category">{{ getCurrentQuestion().category }}</span>
-            <span class="question-difficulty">{{ getCurrentDifficulty().name }}</span>
+        <!-- 動画表示エリア（上半分） -->
+        <div class="video-area">
+          <div class="video-container">
+            <iframe
+              :src="getYouTubeEmbedUrl(getCurrentQuestion().videoId)"
+              frameborder="0"
+              allowfullscreen
+              class="video-player"
+            ></iframe>
           </div>
-          
-          <h2 class="question-text">{{ getCurrentQuestion().question }}</h2>
-          
-          <!-- 画像があれば表示 -->
-          <div v-if="getCurrentQuestion().image" class="question-image">
-            <img :src="getCurrentQuestion().image" :alt="getCurrentQuestion().question" />
-          </div>
+        </div>
 
+        <!-- 4択クイズエリア（下半分） -->
+        <div class="quiz-area">
+          <h2 class="question-text">この動画のタイトルは？</h2>
+          
           <div class="answer-options">
             <button
               v-for="(option, index) in getCurrentQuestion().options"
@@ -119,21 +117,20 @@
             </button>
           </div>
 
-          <!-- 解説表示 -->
-          <div v-if="showAnswer" class="answer-explanation">
-            <div class="explanation-header">
+          <!-- 結果表示 -->
+          <div v-if="showAnswer" class="answer-result">
+            <div class="result-header">
               <span v-if="selectedAnswer === getCurrentQuestion().correct" class="result correct">🎉 正解！</span>
               <span v-else class="result incorrect">❌ 不正解</span>
             </div>
-            <p class="explanation-text">{{ getCurrentQuestion().explanation }}</p>
           </div>
-        </div>
 
-        <!-- 次へボタン -->
-        <div v-if="showAnswer" class="quiz-actions">
-          <button @click="nextQuestion" class="next-button">
-            {{ currentQuestion === totalQuestions ? '結果を見る' : '次の問題' }}
-          </button>
+          <!-- 次へボタン -->
+          <div v-if="showAnswer" class="quiz-actions">
+            <button @click="nextQuestion" class="next-button">
+              {{ currentQuestion === totalQuestions ? '結果を見る' : '次の問題' }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -141,11 +138,15 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref } from 'vue'
+import YouTubeApiService from '../services/youtubeApi.js'
 
 export default {
   name: 'Quiz',
   setup() {
+    // YouTube API サービス
+    const youtubeApi = new YouTubeApiService()
+    
     // リアクティブデータ
     const gameStarted = ref(false)
     const showResults = ref(false)
@@ -153,105 +154,132 @@ export default {
     const currentQuestion = ref(1)
     const selectedAnswer = ref(null)
     const score = ref(0)
-    const selectedDifficulty = ref('easy')
     const startTime = ref(null)
     const elapsedTime = ref(0)
+    const loading = ref(false)
     
-    const totalQuestions = 10
+    const totalQuestions = 5
 
-    // 難易度レベル
-    const difficultyLevels = ref([
-      {
-        id: 'easy',
-        name: '初級',
-        icon: '🌟',
-        description: '基本的な問題'
-      },
-      {
-        id: 'medium',
-        name: '中級',
-        icon: '🔥',
-        description: 'やや難しい問題'
-      },
-      {
-        id: 'hard',
-        name: '上級',
-        icon: '💎',
-        description: 'マニア向け問題'
-      }
-    ])
-
-    // サンプルクイズデータ
-    const quizData = ref({
-      easy: [
-        {
-          category: '基本知識',
-          question: 'YouTubeが設立されたのは何年？',
-          options: ['2003年', '2005年', '2007年', '2009年'],
-          correct: 1,
-          explanation: 'YouTubeは2005年2月に設立されました。'
-        },
-        {
-          category: 'YouTuber',
-          question: 'HIKAKINさんの本名は？',
-          options: ['田中太郎', '開發光', '佐藤陽子', '鈴木一郎'],
-          correct: 1,
-          explanation: 'HIKAKINさんの本名は開發光（かいはつ ひかる）です。'
-        },
-        {
-          category: '機能',
-          question: 'YouTube動画の最大長は？',
-          options: ['10分', '15分', '12時間', '制限なし'],
-          correct: 2,
-          explanation: '一般ユーザーは15分、認証済みアカウントは12時間まで投稿可能です。'
-        }
-      ],
-      medium: [
-        {
-          category: '歴史',
-          question: 'YouTubeで最初にアップロードされた動画は？',
-          options: ['猫の動画', 'ゲーム実況', '動物園での象', '音楽動画'],
-          correct: 2,
-          explanation: '2005年4月23日にアップロードされた「Me at the zoo」が最初の動画です。'
-        },
-        {
-          category: 'ビジネス',
-          question: 'YouTubeを買収した企業は？',
-          options: ['Microsoft', 'Apple', 'Google', 'Meta'],
-          correct: 2,
-          explanation: 'Googleが2006年に16.5億ドルでYouTubeを買収しました。'
-        }
-      ],
-      hard: [
-        {
-          category: 'テクニカル',
-          question: 'YouTubeの動画IDの文字数は？',
-          options: ['8文字', '10文字', '11文字', '12文字'],
-          correct: 2,
-          explanation: 'YouTube動画IDは11文字のランダムな文字列です。'
-        }
+    // ジャルジャルのチャンネルID
+    const JARUJARU_CHANNEL_ID = 'UChwgNUWPM-ksOP3BbfQHS5Q'
+    
+    // タイトルをもじった選択肢を生成する関数
+    const generateModifiedTitles = (originalTitle) => {
+      console.log('元のタイトル:', originalTitle) // デバッグ用
+      
+      const modifiedTitles = []
+      
+      // シンプルな間違い選択肢を生成
+      const simpleModifications = [
+        originalTitle + '前編',
+        originalTitle + '後編',
+        originalTitle.replace('ジャルジャル', 'ジャルジャル×'),
+        originalTitle + ' 完全版',
+        originalTitle + ' 特別編',
+        originalTitle.replace('【', '【完全版'),
+        originalTitle + ' リマスター版'
       ]
-    })
+      
+      // ランダムに3つ選択
+      const shuffled = [...simpleModifications].sort(() => Math.random() - 0.5)
+      const selected = shuffled.slice(0, 3)
+      
+      console.log('生成された間違い選択肢:', selected) // デバッグ用
+      return selected
+    }
+    
+    // API経由で1つのジャルジャル動画を取得
+    const fetchRandomJarujaruVideo = async () => {
+      try {
+        console.log('ジャルジャル動画を取得中...', JARUJARU_CHANNEL_ID)
+        const response = await youtubeApi.getChannelVideos(JARUJARU_CHANNEL_ID, 50)
+        console.log('API レスポンス:', response)
+        
+        // YouTubeApiServiceは response.videos で動画を返す
+        if (response.videos && response.videos.length > 0) {
+          // ランダムに1つ選択
+          const randomIndex = Math.floor(Math.random() * response.videos.length)
+          const video = response.videos[randomIndex]
+          console.log('選択された動画:', video)
+          
+          // YouTubeApiServiceの形式に合わせてvideoIdとtitleを取得
+          const videoId = video.id
+          const title = video.title
+          console.log('動画ID:', videoId, 'タイトル:', title)
+          
+          return {
+            videoId: videoId,
+            correctTitle: title
+          }
+        }
+        throw new Error('動画が見つかりませんでした')
+      } catch (error) {
+        console.error('YouTube API エラー:', error)
+        console.log('フォールバックのデモデータを使用します')
+        // フォールバック: デモデータ
+        return {
+          videoId: 'dQw4w9WgXcQ',
+          correctTitle: 'ジャルジャル コント「デモ動画」'
+        }
+      }
+    }
+    
+    // クイズデータを生成（API経由で取得）
+    const generateQuizData = async () => {
+      const quizQuestions = []
+      
+      for (let i = 0; i < totalQuestions; i++) {
+        loading.value = true
+        const video = await fetchRandomJarujaruVideo()
+        
+        // タイトルをもじった間違い選択肢を生成
+        const incorrectOptions = generateModifiedTitles(video.correctTitle)
+        
+        // 正解+間違い3つで4択を作成
+        const allOptions = [video.correctTitle, ...incorrectOptions].sort(() => Math.random() - 0.5)
+        
+        quizQuestions.push({
+          videoId: video.videoId,
+          options: allOptions,
+          correct: allOptions.indexOf(video.correctTitle)
+        })
+      }
+      
+      loading.value = false
+      return quizQuestions
+    }
+
+    const quizData = ref([])
 
     // 現在の問題を取得
     const getCurrentQuestion = () => {
-      const questions = quizData.value[selectedDifficulty.value]
-      const index = (currentQuestion.value - 1) % questions.length
-      return questions[index]
+      const index = currentQuestion.value - 1
+      const question = quizData.value[index] || {}
+      console.log('Current Question:', question) // デバッグ用
+      return question
     }
 
-    // 現在の難易度を取得
-    const getCurrentDifficulty = () => {
-      return difficultyLevels.value.find(level => level.id === selectedDifficulty.value)
+    // YouTube埋め込みURL生成
+    const getYouTubeEmbedUrl = (videoId) => {
+      return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0&controls=1&rel=0&modestbranding=1&enablejsapi=1&origin=${window.location.origin}&start=0`
     }
+
 
     // クイズ開始
-    const startQuiz = () => {
-      gameStarted.value = true
-      showResults.value = false
-      currentQuestion.value = 1
-      score.value = 0
-      startTime.value = Date.now()
+    const startQuiz = async () => {
+      try {
+        loading.value = true
+        quizData.value = await generateQuizData()
+        gameStarted.value = true
+        showResults.value = false
+        currentQuestion.value = 1
+        score.value = 0
+        startTime.value = Date.now()
+        loading.value = false
+      } catch (error) {
+        console.error('クイズデータの生成に失敗:', error)
+        loading.value = false
+      }
     }
 
     // 答えを選択
@@ -272,7 +300,8 @@ export default {
         // クイズ終了
         elapsedTime.value = Math.floor((Date.now() - startTime.value) / 1000)
         showResults.value = true
-        gameStarted.value = false
+        gameStarted.value = true // gameStartedをtrueのままにする
+        showAnswer.value = false
       } else {
         currentQuestion.value++
         selectedAnswer.value = null
@@ -293,11 +322,11 @@ export default {
     // 結果をシェア
     const shareResult = () => {
       const percentage = Math.round((score.value / totalQuestions) * 100)
-      const text = `YouTubeクイズに挑戦！${totalQuestions}問中${score.value}問正解（${percentage}%）でした！`
+      const text = `ジャルジャルクイズに挑戦！${totalQuestions}問中${score.value}問正解（${percentage}%）でした！${getScoreMessage()}`
       
       if (navigator.share) {
         navigator.share({
-          title: 'YouTubeクイズ結果',
+          title: 'ジャルジャルクイズ結果',
           text: text,
           url: window.location.href
         })
@@ -311,20 +340,22 @@ export default {
 
     // スコアメッセージ
     const getScoreMessage = () => {
-      const percentage = (score.value / totalQuestions) * 100
-      if (percentage >= 90) return '🏆 素晴らしい！'
-      if (percentage >= 70) return '🎉 よくできました！'
-      if (percentage >= 50) return '👍 まあまあです'
-      return '💪 もう一度挑戦！'
+      if (score.value === 5) return '🏆 ジャルジャルマスター！'
+      if (score.value === 4) return '🎉 ジャルジャル上級者！'
+      if (score.value === 3) return '👍 ジャルジャルファン！'
+      if (score.value === 2) return '😊 もう少し！'
+      if (score.value === 1) return '😅 出直してこい！'
+      return '😱 出直してこい！'
     }
 
     // スコア説明
     const getScoreDescription = () => {
-      const percentage = (score.value / totalQuestions) * 100
-      if (percentage >= 90) return 'YouTubeマスターです！'
-      if (percentage >= 70) return 'YouTubeをよく知っていますね'
-      if (percentage >= 50) return 'もう少し勉強してみましょう'
-      return '基本から学び直してみましょう'
+      if (score.value === 5) return 'パーフェクト！あなたは真のジャルジャルファンです！'
+      if (score.value === 4) return 'すごい！ジャルジャルをよく知ってますね！'
+      if (score.value === 3) return 'なかなかやりますね！ジャルジャルファンですね！'
+      if (score.value === 2) return 'もう少し！ジャルジャルをもっと見てみよう！'
+      if (score.value === 1) return 'まだまだ！ジャルジャルの動画をたくさん見よう！'
+      return '全然ダメ！ジャルジャルの勉強をし直そう！'
     }
 
     // 時間フォーマット
@@ -341,12 +372,11 @@ export default {
       currentQuestion,
       selectedAnswer,
       score,
-      selectedDifficulty,
       elapsedTime,
+      loading,
       totalQuestions,
-      difficultyLevels,
       getCurrentQuestion,
-      getCurrentDifficulty,
+      getYouTubeEmbedUrl,
       startQuiz,
       selectAnswer,
       nextQuestion,
@@ -489,9 +519,15 @@ export default {
   transition: all 0.2s;
 }
 
-.start-button:hover {
+.start-button:hover:not(:disabled) {
   background: #cc3333;
   transform: translateY(-2px);
+}
+
+.start-button:disabled {
+  background: #666;
+  cursor: not-allowed;
+  transform: none;
 }
 
 /* クイズゲーム */
@@ -499,13 +535,15 @@ export default {
   flex: 1;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
 .quiz-progress {
   display: flex;
   align-items: center;
   gap: 15px;
-  margin-bottom: 30px;
+  margin-bottom: 15px;
 }
 
 .progress-bar {
@@ -527,41 +565,166 @@ export default {
   white-space: nowrap;
 }
 
-.question-container {
-  flex: 1;
+/* 動画エリア（上半分） */
+.video-area {
+  flex: 0 0 45%;
+  min-height: 200px;
+  max-height: 300px;
+  padding: 5px 0;
 }
 
-.question-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 20px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+.video-container {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
 }
+
+.video-player {
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+}
+
+.video-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  z-index: 20;
+}
+
+.video-overlay:hover {
+  background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+  transform: scale(0.98);
+}
+
+.play-button {
+  width: 80px;
+  height: 80px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  transition: all 0.3s ease;
+  color: #667eea;
+}
+
+.play-button svg {
+  width: 32px;
+  height: 32px;
+  margin-left: 4px;
+}
+
+.video-overlay:hover .play-button {
+  background: #fff;
+  transform: scale(1.1);
+}
+
+.video-hint {
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+  margin: 0;
+  z-index: 10;
+  position: relative;
+}
+
+/* 動作確認済みのオーバーレイスタイル */
+.working-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  cursor: pointer;
+  border-radius: 12px;
+}
+
+.overlay-content {
+  text-align: center;
+  color: white;
+}
+
+.play-btn {
+  width: 60px;
+  height: 60px;
+  background: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 15px;
+  color: #667eea;
+  font-size: 20px;
+}
+
+.overlay-text {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* クイズエリア（下半分） */
+.quiz-area {
+  flex: 0 0 55%;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 0 0 0;
+  min-height: 0;
+}
+
 
 .question-text {
-  font-size: 22px;
-  line-height: 1.4;
-  margin-bottom: 30px;
+  font-size: 18px;
+  line-height: 1.3;
+  margin-bottom: 15px;
+  text-align: center;
+  font-weight: 600;
 }
 
 .answer-options {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 30px;
+  gap: 8px;
+  margin-bottom: 15px;
+  flex: 1;
 }
 
 .answer-option {
   background: rgba(255, 255, 255, 0.1);
   border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
-  padding: 15px 20px;
+  border-radius: 10px;
+  padding: 10px 12px;
   color: #fff;
   cursor: pointer;
   transition: all 0.2s;
-  text-align: left;
-  font-size: 16px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 500;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .answer-option:hover:not(:disabled) {
@@ -587,35 +750,32 @@ export default {
   cursor: not-allowed;
 }
 
-/* 解説 */
-.answer-explanation {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 20px;
-  backdrop-filter: blur(10px);
+/* 結果表示 */
+.answer-result {
+  text-align: center;
+  padding: 10px;
+  margin-bottom: 10px;
 }
 
-.explanation-header {
-  margin-bottom: 10px;
+.result-header {
+  margin-bottom: 5px;
 }
 
 .result.correct {
   color: #22c55e;
   font-weight: 600;
+  font-size: 16px;
 }
 
 .result.incorrect {
   color: #ef4444;
   font-weight: 600;
-}
-
-.explanation-text {
-  color: rgba(255, 255, 255, 0.9);
-  line-height: 1.5;
+  font-size: 16px;
 }
 
 .quiz-actions {
-  margin-top: 20px;
+  margin-top: auto;
+  padding-top: 5px;
 }
 
 .next-button {
@@ -746,6 +906,77 @@ export default {
   
   .result-actions {
     flex-direction: row;
+  }
+  
+  .video-player {
+    min-height: 300px;
+  }
+  
+  .answer-option {
+    font-size: 16px;
+    padding: 15px 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .quiz-game {
+    gap: 5px;
+  }
+  
+  .video-area {
+    flex: 0 0 40%;
+    min-height: 160px;
+    max-height: 220px;
+    padding: 5px 0;
+  }
+  
+  .video-player {
+    min-height: 150px;
+  }
+  
+  .play-button {
+    width: 60px;
+    height: 60px;
+    margin-bottom: 15px;
+  }
+  
+  .play-button svg {
+    width: 24px;
+    height: 24px;
+  }
+  
+  .video-hint {
+    font-size: 14px;
+  }
+  
+  .quiz-area {
+    flex: 0 0 60%;
+    padding: 5px 0 0 0;
+  }
+  
+  .question-text {
+    font-size: 16px;
+    margin-bottom: 10px;
+  }
+  
+  .answer-options {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  
+  .answer-option {
+    font-size: 13px;
+    padding: 8px 10px;
+    min-height: 38px;
+  }
+  
+  .quiz-progress {
+    margin-bottom: 10px;
+  }
+  
+  .answer-result {
+    padding: 8px;
+    margin-bottom: 8px;
   }
 }
 </style>
